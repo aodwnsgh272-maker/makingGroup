@@ -1,9 +1,9 @@
-// Firebase 웹 설정값은 클라이언트 앱 식별용 공개 설정입니다.
+// firebase-config.js
 export const firebaseWebConfig = {
-  apiKey: 'AIzaSyD-77MKQi93kOPWsZ8qQqybvcKGWbd6TYQ',
-  authDomain: 'makegroup-bbbf8.firebaseapp.com',
-  projectId: 'makegroup-bbbf8',
-  storageBucket: 'makegroup-bbbf8.firebasestorage.app',
-  messagingSenderId: '684846036502',
-  appId: '1:684846036502:web:772073e6b06e9fd7f46737',
+  apiKey: "AIzaSyBOCLWABVZXphZkZpmbN2MGnKCp5Fq5pqo",
+  authDomain: "makegroup-e0f9b.firebaseapp.com",
+  projectId: "makegroup-e0f9b",
+  storageBucket: "makegroup-e0f9b.firebasestorage.app",
+  messagingSenderId: "142329727667",
+  appId: "1:142329727667:web:21909eac6df8c3580afec6"
 };
