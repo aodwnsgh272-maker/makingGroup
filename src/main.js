@@ -1,16 +1,10 @@
 import { firebaseWebConfig } from './firebase-config.js';
-const environment = import.meta.env ?? {};
-const firebaseConfig = {
-  apiKey: environment.VITE_FIREBASE_API_KEY ?? firebaseWebConfig.apiKey,
-  authDomain: environment.VITE_FIREBASE_AUTH_DOMAIN ?? firebaseWebConfig.authDomain,
-  projectId: environment.VITE_FIREBASE_PROJECT_ID ?? firebaseWebConfig.projectId,
-  storageBucket: environment.VITE_FIREBASE_STORAGE_BUCKET ?? firebaseWebConfig.storageBucket,
-  messagingSenderId: environment.VITE_FIREBASE_MESSAGING_SENDER_ID ?? firebaseWebConfig.messagingSenderId,
-  appId: environment.VITE_FIREBASE_APP_ID ?? firebaseWebConfig.appId,
-};
+
+const firebaseConfig = firebaseWebConfig;
 const configured = Object.values(firebaseConfig).every(Boolean);
 let db = null;
 let firestore = null;
+
 async function connectFirebase() {
   if (db) return true;
   if (!configured) return false;
