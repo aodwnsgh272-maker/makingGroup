@@ -5,6 +5,9 @@ const configured = Object.values(firebaseConfig).every(Boolean);
 let db = null;
 let firestore = null;
 
+// 관리자 비밀번호 (원하시는 비밀번호로 변경하세요)
+const ADMIN_PASSWORD = '1234';
+
 async function connectFirebase() {
   if (db) return true;
   if (!configured) return false;
@@ -12,9 +15,11 @@ async function connectFirebase() {
     import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),
     import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js'),
   ]);
-  firestore = api; db = api.getFirestore(initializeApp(firebaseConfig));
+  firestore = api; 
+  db = api.getFirestore(initializeApp(firebaseConfig));
   return true;
 }
+
 const app = document.querySelector('#app');
 const cohorts = ['1기', '2기', '3기', '4기', '5기'];
 const topics = ['해양 환경/생태계', '해양 물류/항만', '해양 관광/레저', '수산업'];
@@ -40,13 +45,14 @@ const questions = [
   '반 학생들이나 사람들 앞에서 발표할 때 크게 떨지 않고 준비한 내용을 재미있고 자신 있게 전달할 수 있다.',
   '친구들에게 재미있는 경험담이나 이야기를 유쾌하고 몰입감 있게 전달하는 것을 좋아한다.'
 ];
+
 const options = values => values.map(x => `<option value="${x}">${x}</option>`).join('');
 const questionCards = questions.map((text, i) => `<article class="question"><b>Q${i + 1}.</b><p>${text}</p><div class="scale" role="group" aria-label="Q${i + 1} 점수">${[1,2,3,4,5].map(score => `<label><input required type="radio" name="q${i + 1}" value="${score}"><span>${score}</span></label>`).join('')}</div></article>`).join('');
 
 app.innerHTML = `
   <main>
     <header><span class="logo">M</span><div><h1>모여라</h1><p>더 잘 어울리는 조를 만드는 가장 쉬운 방법</p></div></header>
-    <nav><button class="tab active" data-page="entry">학생 등록</button><button class="tab" data-page="teams">조 편성</button></nav>
+    <nav><button class="tab active" data-page="entry">학생 등록</button><button class="tab" data-page="teams">조 편성 및 관리</button></nav>
     <section id="entry" class="page active">
       <div class="card intro"><h2>학생 정보 등록</h2><p>입력한 정보는 해당 기수의 조 편성에만 사용됩니다.</p></div>
       <form id="student-form" class="card form-grid">
@@ -65,50 +71,184 @@ app.innerHTML = `
       <p id="entry-status" class="status"></p>
     </section>
     <section id="teams" class="page">
-      <div class="card intro"><h2>조 편성하기</h2><p>주제 일치 → 역할 분산 → 학교 분산 순으로 균형 있게 추천합니다.</p></div>
+      <div class="card intro">
+        <h2>조 편성 및 데이터 관리</h2>
+        <p>관리자 비밀번호를 입력하여 조를 추천받거나 등록된 학생 데이터를 관리합니다.</p>
+      </div>
+
+      <div class="card controls">
+        <label>관리자 비밀번호 
+          <input type="password" id="admin-pass" placeholder="비밀번호 입력" />
+        </label>
+      </div>
+
       <form id="team-form" class="card controls">
         <label>대상 기수 <select name="cohort" required><option value="">선택</option>${options(cohorts)}</select></label>
         <label>조별 인원 <input name="size" type="number" value="4" min="2" max="20" required /></label>
         <button class="primary" type="submit">조 추천 만들기</button>
       </form>
-      <p id="team-status" class="status"></p><div id="results"></div>
+      <p id="team-status" class="status"></p>
+      <div id="results"></div>
+
+      <div class="card intro" style="margin-top: 2rem;">
+        <h2>등록 학생 데이터 관리</h2>
+        <button type="button" id="btn-load-students" class="primary" style="background:#4b5563;">학생 데이터 불러오기</button>
+      </div>
+      <div id="student-list" class="card" style="margin-top: 1rem;">
+        <p style="color:#6b7280;">'학생 데이터 불러오기' 버튼을 누르면 목록이 표시됩니다.</p>
+      </div>
     </section>
   </main>`;
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => {
   document.querySelectorAll('.tab, .page').forEach(x => x.classList.remove('active'));
-  button.classList.add('active'); document.querySelector(`#${button.dataset.page}`).classList.add('active');
+  button.classList.add('active'); 
+  document.querySelector(`#${button.dataset.page}`).classList.add('active');
 }));
 
 const entryStatus = document.querySelector('#entry-status');
 document.querySelector('#student-form').addEventListener('submit', async e => {
   e.preventDefault();
-  if (!await connectFirebase()) return message(entryStatus, 'Firebase 설정값이 없습니다. .env 파일을 먼저 설정해 주세요.', true);
-  const f = new FormData(e.target); const scores = Array.from({length:20}, (_,i) => Number(f.get(`q${i+1}`)));
+  if (!await connectFirebase()) return message(entryStatus, 'Firebase 설정값이 없습니다.', true);
+  const f = new FormData(e.target); 
+  const scores = Array.from({length:20}, (_,i) => Number(f.get(`q${i+1}`)));
   if (scores.some(x => !x)) return message(entryStatus, '역할 검사 20문항을 모두 답해 주세요.', true);
   const roles = getRoles(scores);
   const student = Object.fromEntries(['cohort','name','gender','school','topic'].map(k => [k, f.get(k).trim()]));
-  try { await firestore.addDoc(firestore.collection(db, 'students'), { ...student, roles, scores, createdAt: firestore.serverTimestamp() }); e.target.reset(); updateRoleResult(); message(entryStatus, `${student.name} 학생 정보를 저장했어요. 배정 역할: ${roles.join(', ')}`); }
-  catch (err) { message(entryStatus, `저장하지 못했어요: ${err.message}`, true); }
+  try { 
+    await firestore.addDoc(firestore.collection(db, 'students'), { ...student, roles, scores, createdAt: firestore.serverTimestamp() }); 
+    e.target.reset(); 
+    updateRoleResult(); 
+    message(entryStatus, `${student.name} 학생 정보를 저장했어요. 배정 역할: ${roles.join(', ')}`); 
+  } catch (err) { 
+    message(entryStatus, `저장하지 못했어요: ${err.message}`, true); 
+  }
 });
 
-function message(el, text, error = false) { el.textContent = text; el.className = `status ${error ? 'error' : 'success'}`; }
-function getRoles(scores) { const labels = ['기획 및 PM', '디자인', 'AI 프롬프터', '발표 및 테스터']; const sums = [0,1,2,3].map(i => scores.slice(i*5, i*5+5).reduce((a,b)=>a+b,0)); const high = Math.max(...sums); return labels.filter((_, i) => sums[i] === high); }
-function updateRoleResult() { const data = new FormData(document.querySelector('#student-form')); const scores = Array.from({length:20}, (_,i) => Number(data.get(`q${i+1}`))); const result = document.querySelector('#role-result'); if (scores.some(x => !x)) return result.textContent = '검사를 완료하면 희망 역할이 자동으로 정해집니다.'; const sums = [0,1,2,3].map(i => scores.slice(i*5, i*5+5).reduce((a,b)=>a+b,0)); result.innerHTML = `<b>추천 역할: ${getRoles(scores).join(', ')}</b><span>기획·PM ${sums[0]}점 · 디자인 ${sums[1]}점 · AI 프롬프터 ${sums[2]}점 · 발표·테스터 ${sums[3]}점</span>`; }
+function message(el, text, error = false) { 
+  el.textContent = text; 
+  el.className = `status ${error ? 'error' : 'success'}`; 
+}
+
+function getRoles(scores) { 
+  const labels = ['기획 및 PM', '디자인', 'AI 프롬프터', '발표 및 테스터']; 
+  const sums = [0,1,2,3].map(i => scores.slice(i*5, i*5+5).reduce((a,b)=>a+b,0)); 
+  const high = Math.max(...sums); 
+  return labels.filter((_, i) => sums[i] === high); 
+}
+
+function updateRoleResult() { 
+  const data = new FormData(document.querySelector('#student-form')); 
+  const scores = Array.from({length:20}, (_,i) => Number(data.get(`q${i+1}`))); 
+  const result = document.querySelector('#role-result'); 
+  if (scores.some(x => !x)) return result.textContent = '검사를 완료하면 희망 역할이 자동으로 정해집니다.'; 
+  const sums = [0,1,2,3].map(i => scores.slice(i*5, i*5+5).reduce((a,b)=>a+b,0)); 
+  result.innerHTML = `<b>추천 역할: ${getRoles(scores).join(', ')}</b><span>기획·PM ${sums[0]}점 · 디자인 ${sums[1]}점 · AI 프롬프터 ${sums[2]}점 · 발표·테스터 ${sums[3]}점</span>`; 
+}
+
 document.querySelector('#student-form').addEventListener('change', updateRoleResult);
 
+// 조 편성 이벤트 (비밀번호 확인 포함)
 document.querySelector('#team-form').addEventListener('submit', async e => {
-  e.preventDefault(); const status = document.querySelector('#team-status'); const out = document.querySelector('#results'); out.innerHTML = '';
-  if (!await connectFirebase()) return message(status, 'Firebase 설정값이 없습니다. .env 파일을 먼저 설정해 주세요.', true);
+  e.preventDefault(); 
+  const status = document.querySelector('#team-status'); 
+  const out = document.querySelector('#results'); 
+  out.innerHTML = '';
+
+  const inputPass = document.querySelector('#admin-pass').value;
+  if (inputPass !== ADMIN_PASSWORD) {
+    return message(status, '비밀번호가 올바르지 않습니다.', true);
+  }
+
+  if (!await connectFirebase()) return message(status, 'Firebase 설정값이 없습니다.', true);
   const f = new FormData(e.target), cohort = f.get('cohort').trim(), size = Number(f.get('size'));
+
   try {
     const snap = await firestore.getDocs(firestore.query(firestore.collection(db, 'students'), firestore.where('cohort', '==', cohort)));
-    const students = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const students = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (students.length < 2) return message(status, `'${cohort}' 학생이 2명 이상 필요합니다.`, true);
-    const teams = createTeams(students, size); message(status, `${students.length}명을 ${teams.length}개 조로 편성했어요.`);
-    out.innerHTML = teams.map((team,i) => `<article class="team"><h3>${i+1}조 <span>${team.length}명</span></h3>${team.map(s => `<div class="member"><b>${escapeHtml(s.name)}</b><span>${escapeHtml(s.gender)} · ${escapeHtml(s.school)}</span><small>${escapeHtml(s.topic)} · ${s.roles.map(escapeHtml).join(', ')}</small></div>`).join('')}</article>`).join('');
-  } catch (err) { message(status, `불러오지 못했어요: ${err.message}`, true); }
+    
+    const teams = createTeams(students, size); 
+    message(status, `${students.length}명을 ${teams.length}개 조로 편성했어요.`);
+    out.innerHTML = teams.map((team, i) => `
+      <article class="team">
+        <h3>${i + 1}조 <span>${team.length}명</span></h3>
+        ${team.map(s => `
+          <div class="member">
+            <b>${escapeHtml(s.name)}</b>
+            <span>${escapeHtml(s.gender)} · ${escapeHtml(s.school)}</span>
+            <small>${escapeHtml(s.topic)} · ${s.roles.map(escapeHtml).join(', ')}</small>
+          </div>
+        `).join('')}
+      </article>
+    `).join('');
+  } catch (err) { 
+    message(status, `불러오지 못했어요: ${err.message}`, true); 
+  }
 });
+
+// 학생 목록 로드 및 삭제 버튼 클릭 이벤트 핸들러
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'btn-load-students') {
+    const inputPass = document.querySelector('#admin-pass').value;
+    if (inputPass !== ADMIN_PASSWORD) {
+      alert('비밀번호가 올바르지 않습니다.');
+      return;
+    }
+    if (!await connectFirebase()) return alert('Firebase 설정 오류');
+    loadStudentList();
+  }
+
+  if (e.target && e.target.classList.contains('btn-delete-student')) {
+    const studentId = e.target.dataset.id;
+    const studentName = e.target.dataset.name;
+
+    if (confirm(`${studentName} 학생을 삭제하시겠습니까?`)) {
+      try {
+        await firestore.deleteDoc(firestore.doc(db, 'students', studentId));
+        alert('삭제되었습니다.');
+        loadStudentList();
+      } catch (err) {
+        alert(`삭제 실패: ${err.message}`);
+      }
+    }
+  }
+});
+
+async function loadStudentList() {
+  const listEl = document.querySelector('#student-list');
+  listEl.innerHTML = '불러오는 중...';
+
+  try {
+    const snap = await firestore.getDocs(firestore.collection(db, 'students'));
+    if (snap.empty) {
+      listEl.innerHTML = '<p>등록된 학생이 없습니다.</p>';
+      return;
+    }
+
+    let html = '<table style="width:100%; border-collapse:collapse; text-align:left;">';
+    html += '<tr style="border-bottom:2px solid #ddd;"><th>기수</th><th>이름</th><th>학교</th><th>주제</th><th>관리</th></tr>';
+    
+    snap.docs.forEach(doc => {
+      const s = doc.data();
+      html += `
+        <tr style="border-bottom:1px solid #eee; height:40px;">
+          <td>${escapeHtml(s.cohort || '-')}</td>
+          <td><b>${escapeHtml(s.name || '-')}</b></td>
+          <td>${escapeHtml(s.school || '-')}</td>
+          <td>${escapeHtml(s.topic || '-')}</td>
+          <td>
+            <button class="btn-delete-student" data-id="${doc.id}" data-name="${escapeHtml(s.name)}" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button>
+          </td>
+        </tr>
+      `;
+    });
+    html += '</table>';
+    listEl.innerHTML = html;
+  } catch (err) {
+    listEl.innerHTML = `<p style="color:red;">목록 불러오기 실패: ${err.message}</p>`;
+  }
+}
 
 function createTeams(students, size) {
   const count = Math.ceil(students.length / size), capacities = Array.from({length:count}, (_,i) => Math.floor(students.length/count)+(i < students.length%count ? 1 : 0));
@@ -119,6 +259,7 @@ function createTeams(students, size) {
     improve(teams); if (!best || totalScore(teams)>totalScore(best)) best=teams;
   } return best;
 }
+
 function teamScore(team, s) { return team.reduce((score, x) => score + (x.topic===s.topic ? 12 : 0) - (x.school===s.school ? 3 : 0) - (x.roles.some(r=>s.roles.includes(r)) ? 5 : 0), 0); }
 function totalScore(teams) { return teams.reduce((n,t)=>n+t.reduce((v,s,i)=>v+teamScore(t.slice(0,i),s),0),0); }
 function improve(teams) { for(let k=0;k<1500;k++) { const a=Math.floor(Math.random()*teams.length), b=Math.floor(Math.random()*teams.length); if(a===b||!teams[a].length||!teams[b].length)continue; const i=Math.floor(Math.random()*teams[a].length),j=Math.floor(Math.random()*teams[b].length), before=totalScore(teams); [teams[a][i],teams[b][j]]=[teams[b][j],teams[a][i]]; if(totalScore(teams)<before)[teams[a][i],teams[b][j]]=[teams[b][j],teams[a][i]]; } }
