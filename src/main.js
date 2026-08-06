@@ -92,7 +92,10 @@ app.innerHTML = `
 
       <div class="card intro" style="margin-top: 2rem;">
         <h2>등록 학생 데이터 관리</h2>
-        <button type="button" id="btn-load-students" class="primary" style="background:#4b5563;">학생 데이터 불러오기</button>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button type="button" id="btn-load-students" class="primary" style="background:#4b5563;">학생 데이터 불러오기</button>
+          <button type="button" id="btn-delete-all-students" class="primary" style="background:#ef4444;">전체 데이터 삭제</button>
+        </div>
       </div>
       <div id="student-list" class="card" style="margin-top: 1rem;">
         <p style="color:#6b7280;">'학생 데이터 불러오기' 버튼을 누르면 목록이 표시됩니다.</p>
@@ -187,8 +190,9 @@ document.querySelector('#team-form').addEventListener('submit', async e => {
   }
 });
 
-// 학생 목록 로드 및 삭제 버튼 클릭 이벤트 핸들러
+// 버튼 및 클릭 이벤트 핸들러
 document.addEventListener('click', async (e) => {
+  // 학생 데이터 불러오기
   if (e.target && e.target.id === 'btn-load-students') {
     const inputPass = document.querySelector('#admin-pass').value;
     if (inputPass !== ADMIN_PASSWORD) {
@@ -199,6 +203,7 @@ document.addEventListener('click', async (e) => {
     loadStudentList();
   }
 
+  // 개별 학생 삭제
   if (e.target && e.target.classList.contains('btn-delete-student')) {
     const studentId = e.target.dataset.id;
     const studentName = e.target.dataset.name;
@@ -210,6 +215,35 @@ document.addEventListener('click', async (e) => {
         loadStudentList();
       } catch (err) {
         alert(`삭제 실패: ${err.message}`);
+      }
+    }
+  }
+
+  // 전체 데이터 삭제
+  if (e.target && e.target.id === 'btn-delete-all-students') {
+    const inputPass = document.querySelector('#admin-pass').value;
+    if (inputPass !== ADMIN_PASSWORD) {
+      alert('비밀번호가 올바르지 않습니다.');
+      return;
+    }
+    if (!await connectFirebase()) return alert('Firebase 설정 오류');
+
+    if (confirm('⚠️ 정말로 모든 학생 데이터를 전체 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+      try {
+        const snap = await firestore.getDocs(firestore.collection(db, 'students'));
+        if (snap.empty) {
+          alert('삭제할 데이터가 없습니다.');
+          return;
+        }
+
+        // 모든 문서 동시 삭제 진행
+        const deletePromises = snap.docs.map(doc => firestore.deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+
+        alert('모든 학생 데이터가 완전 삭제되었습니다.');
+        loadStudentList();
+      } catch (err) {
+        alert(`전체 삭제 실패: ${err.message}`);
       }
     }
   }
