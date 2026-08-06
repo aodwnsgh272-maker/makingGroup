@@ -227,12 +227,13 @@ async function loadStudentList() {
     }
 
     let html = '<table style="width:100%; border-collapse:collapse; text-align:left;">';
-    html += '<tr style="border-bottom:2px solid #ddd;"><th>기수</th><th>이름</th><th>학교</th><th>주제</th><th>관리</th></tr>';
+    html += '<tr style="border-bottom:2px solid #ddd;"><th>번호</th><th>기수</th><th>이름</th><th>학교</th><th>주제</th><th>관리</th></tr>';
     
-    snap.docs.forEach(doc => {
+    snap.docs.forEach((doc, index) => {
       const s = doc.data();
       html += `
         <tr style="border-bottom:1px solid #eee; height:40px;">
+          <td><b>${index + 1}</b></td>
           <td>${escapeHtml(s.cohort || '-')}</td>
           <td><b>${escapeHtml(s.name || '-')}</b></td>
           <td>${escapeHtml(s.school || '-')}</td>
