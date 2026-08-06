@@ -236,7 +236,6 @@ document.addEventListener('click', async (e) => {
           return;
         }
 
-        // 모든 문서 동시 삭제 진행
         const deletePromises = snap.docs.map(doc => firestore.deleteDoc(doc.ref));
         await Promise.all(deletePromises);
 
@@ -261,7 +260,7 @@ async function loadStudentList() {
     }
 
     let html = '<table style="width:100%; border-collapse:collapse; text-align:left;">';
-    html += '<tr style="border-bottom:2px solid #ddd;"><th>번호</th><th>기수</th><th>이름</th><th>학교</th><th>주제</th><th>관리</th></tr>';
+    html += '<tr style="border-bottom:2px solid #ddd;"><th>번호</th><th>기수</th><th>이름</th><th>성별</th><th>학교</th><th>주제</th><th>관리</th></tr>';
     
     snap.docs.forEach((doc, index) => {
       const s = doc.data();
@@ -270,6 +269,7 @@ async function loadStudentList() {
           <td><b>${index + 1}</b></td>
           <td>${escapeHtml(s.cohort || '-')}</td>
           <td><b>${escapeHtml(s.name || '-')}</b></td>
+          <td>${escapeHtml(s.gender || '-')}</td>
           <td>${escapeHtml(s.school || '-')}</td>
           <td>${escapeHtml(s.topic || '-')}</td>
           <td>
@@ -295,7 +295,36 @@ function createTeams(students, size) {
   } return best;
 }
 
-function teamScore(team, s) { return team.reduce((score, x) => score + (x.topic===s.topic ? 12 : 0) - (x.school===s.school ? 3 : 0) - (x.roles.some(r=>s.roles.includes(r)) ? 5 : 0), 0); }
-function totalScore(teams) { return teams.reduce((n,t)=>n+t.reduce((v,s,i)=>v+teamScore(t.slice(0,i),s),0),0); }
-function improve(teams) { for(let k=0;k<1500;k++) { const a=Math.floor(Math.random()*teams.length), b=Math.floor(Math.random()*teams.length); if(a===b||!teams[a].length||!teams[b].length)continue; const i=Math.floor(Math.random()*teams[a].length),j=Math.floor(Math.random()*teams[b].length), before=totalScore(teams); [teams[a][i],teams[b][j]]=[teams[b][j],teams[a][i]]; if(totalScore(teams)<before)[teams[a][i],teams[b][j]]=[teams[b][j],teams[a][i]]; } }
+// 점수 계산 함수 (성별 균형 로직 포함)
+function teamScore(team, s) {
+  let score = team.reduce((sc, x) => sc + (x.topic === s.topic ? 12 : 0) - (x.school === s.school ? 3 : 0) - (x.roles.some(r => s.roles.includes(r)) ? 5 : 0) - (x.gender === s.gender ? 2 : 0), 0);
+  return score;
+}
+
+// 조 전체 점수 평가 함수 (여학생 0명 조 방지 감점 포함)
+function totalScore(teams) {
+  let score = 0;
+  for (const t of teams) {
+    score += t.reduce((v, s, i) => v + teamScore(t.slice(0, i), s), 0);
+    
+    // 전체 여학생이 최소 1명 이상 존재하는 상황에서 여학생이 0명인 조가 발생하는 경우 큰 감점(-25점)
+    const femaleCount = t.filter(m => m.gender === '여성').length;
+    if (femaleCount === 0 && t.length > 0) {
+      score -= 25;
+    }
+  }
+  return score;
+}
+
+function improve(teams) { 
+  for(let k=0; k<1500; k++) { 
+    const a = Math.floor(Math.random()*teams.length), b = Math.floor(Math.random()*teams.length); 
+    if(a === b || !teams[a].length || !teams[b].length) continue; 
+    const i = Math.floor(Math.random()*teams[a].length), j = Math.floor(Math.random()*teams[b].length);
+    const before = totalScore(teams); 
+    [teams[a][i], teams[b][j]] = [teams[b][j], teams[a][i]]; 
+    if(totalScore(teams) < before) [teams[a][i], teams[b][j]] = [teams[b][j], teams[a][i]]; 
+  } 
+}
+
 function escapeHtml(v) { return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
